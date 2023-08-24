@@ -148,6 +148,19 @@ func (el *PutClient) generateSecret(ctx context.Context, keycloakClient *keycloa
 		}
 	}
 
+	_, exists = clientSecret.Data[keycloakApi.ClientSecretKey]
+	if !exists {
+		clientSecret.Data[keycloakApi.ClientSecretKey] = password.MustGenerate(passwordLength, passwordDigits, passwordSymbols, true, true)
+
+		if err := controllerutil.SetControllerReference(keycloakClient, &clientSecret, el.scheme); err != nil {
+			return "", fmt.Errorf("unable to set controller ref for secret: %w", err)
+		}
+
+		if err := el.Client.Update(ctx, &clientSecret); err != nil {
+			return "", fmt.Errorf("unable to update secret %+v, err: %w", clientSecret, err)
+		}
+	}
+
 	keycloakClient.Status.ClientSecretName = clientSecret.Name
 	keycloakClient.Spec.Secret = clientSecret.Name
 
