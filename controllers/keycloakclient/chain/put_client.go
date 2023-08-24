@@ -149,6 +149,10 @@ func (el *PutClient) generateSecret(ctx context.Context, keycloakClient *keycloa
 	}
 
 	if _, ok := clientSecret.Data[keycloakApi.ClientSecretKey]; !ok {
+		if clientSecret.Data == nil {
+			clientSecret.Data = map[string][]byte{}
+		}
+
 		clientSecret.Data[keycloakApi.ClientSecretKey] = []byte(
 			password.MustGenerate(passwordLength, passwordDigits, passwordSymbols, true, true),
 		)

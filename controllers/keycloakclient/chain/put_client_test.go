@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	testifyMock "github.com/stretchr/testify/mock"
 	v1 "k8s.io/api/apps/v1"
+	coreV1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -116,4 +118,73 @@ func TestPutClient_Serve_FailureToUpdateClient(t *testing.T) {
 	err = pc.Serve(context.Background(), &kc, kClient, realmName)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "secrets \"sec\" not found")
+}
+
+func TestPutClient_Serve_SecretKeyMissing(t *testing.T) {
+	logger := mock.NewLogr()
+
+	clientName := "foo"
+	namespace := "namespace"
+	realmName := fmt.Sprintf("%s.%s", namespace, clientName)
+	secretName := fmt.Sprintf("keycloak-client-%s-secret", clientName)
+
+	kc := keycloakApi.KeycloakClient{ObjectMeta: metav1.ObjectMeta{Name: clientName, Namespace: namespace},
+		Spec: keycloakApi.KeycloakClientSpec{
+			TargetRealm: realmName,
+			RealmRoles: &[]keycloakApi.RealmRole{
+				{Name: "fake-client-administrators", Composite: "administrator"},
+				{Name: "fake-client-users", Composite: "developer"},
+			},
+			Public:                  false,
+			ClientId:                "fake-client",
+			WebUrl:                  "fake-url",
+			DirectAccess:            false,
+			AdvancedProtocolMappers: true, ClientRoles: nil, ProtocolMappers: &[]keycloakApi.ProtocolMapper{
+				{Name: "bar", Config: map[string]string{"bar": "1"}},
+				{Name: "foo", Config: map[string]string{"foo": "2"}},
+			},
+		},
+	}
+
+	clientSecret := coreV1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      secretName,
+		},
+	}
+
+	s := scheme.Scheme
+	s.AddKnownTypes(v1.SchemeGroupVersion, &kc)
+
+	client := fake.
+		NewClientBuilder().
+		WithScheme(s).
+		WithRuntimeObjects(&kc).
+		WithRuntimeObjects(&clientSecret).
+		Build()
+
+	pc := PutClient{
+		BaseElement: BaseElement{
+			Logger: logger,
+			Client: client,
+			scheme: s,
+		},
+	}
+
+	kClient := new(adapter.Mock)
+
+	kClient.On("GetClientID", kc.Spec.ClientId, realmName).Return("id1", nil).Once()
+	kClient.On("UpdateClient", testifyMock.Anything).Once()
+
+	clientSecretValue, _ := pc.generateSecret(context.TODO(), &kc)
+
+	var foundClientSecret coreV1.Secret
+	pc.Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace,
+		Name: secretName}, &foundClientSecret)
+
+	t.Logf("%+v\n", foundClientSecret)
+
+	foundClientSecretValue := string(foundClientSecret.Data[keycloakApi.ClientSecretKey])
+
+	assert.Exactly(t, foundClientSecretValue, clientSecretValue)
 }
