@@ -183,8 +183,6 @@ func TestPutClient_Serve_SecretKeyMissing(t *testing.T) {
 		Name: secretName}, &foundClientSecret)
 		assert.NoError(err)
 
-	t.Logf("%+v\n", foundClientSecret)
-
 	foundClientSecretValue := string(foundClientSecret.Data[keycloakApi.ClientSecretKey])
 
 	assert.Exactly(t, foundClientSecretValue, clientSecretValue)
