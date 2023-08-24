@@ -179,13 +179,13 @@ func TestPutClient_Serve_SecretKeyMissing(t *testing.T) {
 	clientSecretValue, _ := pc.generateSecret(context.TODO(), &kc)
 
 	var foundClientSecret coreV1.Secret
-	pc.Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace,
+	err = pc.Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace,
 		Name: secretName}, &foundClientSecret)
+		assert.NoError(err)
 
 	t.Logf("%+v\n", foundClientSecret)
 
-	err = foundClientSecretValue := string(foundClientSecret.Data[keycloakApi.ClientSecretKey])
-	assert.NoError(err)
+	foundClientSecretValue := string(foundClientSecret.Data[keycloakApi.ClientSecretKey])
 
 	assert.Exactly(t, foundClientSecretValue, clientSecretValue)
 }
