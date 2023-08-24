@@ -148,9 +148,10 @@ func (el *PutClient) generateSecret(ctx context.Context, keycloakClient *keycloa
 		}
 	}
 
-	_, exists = clientSecret.Data[keycloakApi.ClientSecretKey]
-	if !exists {
-		clientSecret.Data[keycloakApi.ClientSecretKey] = password.MustGenerate(passwordLength, passwordDigits, passwordSymbols, true, true)
+	if _, ok := clientSecret.Data[keycloakApi.ClientSecretKey]; !ok {
+		clientSecret.Data[keycloakApi.ClientSecretKey] = []byte(
+			password.MustGenerate(passwordLength, passwordDigits, passwordSymbols, true, true),
+		)
 
 		if err := controllerutil.SetControllerReference(keycloakClient, &clientSecret, el.scheme); err != nil {
 			return "", fmt.Errorf("unable to set controller ref for secret: %w", err)
