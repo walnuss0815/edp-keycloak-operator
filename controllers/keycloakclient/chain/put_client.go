@@ -128,23 +128,17 @@ func (el *PutClient) generateSecret(ctx context.Context, keycloakClient *keycloa
 		return "", fmt.Errorf("unable to check client secret existance: %w", err)
 	}
 
+	clientSecretValue := password.MustGenerate(passwordLength, passwordDigits, passwordSymbols, true, true)
+
 	if k8sErrors.IsNotFound(err) {
-		clientSecret = coreV1.Secret{
-			ObjectMeta: v1.ObjectMeta{Namespace: keycloakClient.Namespace,
-				Name: secretName},
-			Data: map[string][]byte{
-				keycloakApi.ClientSecretKey: []byte(
-					password.MustGenerate(passwordLength, passwordDigits, passwordSymbols, true, true),
-				),
-			},
+		err = el.createClientSecret(ctx, keycloakClient, secretName, clientSecretValue)
+		if err != nil {
+			return "", fmt.Errorf("unable to create client secret: %w", err)
 		}
-
-		if err := controllerutil.SetControllerReference(keycloakClient, &clientSecret, el.scheme); err != nil {
-			return "", fmt.Errorf("unable to set controller ref for secret: %w", err)
-		}
-
-		if err := el.Client.Create(ctx, &clientSecret); err != nil {
-			return "", fmt.Errorf("unable to create secret %+v, err: %w", clientSecret, err)
+	} else if _, ok := clientSecret.Data[keycloakApi.ClientSecretKey]; !ok {
+		err = el.updateClientSecret(ctx, keycloakClient, clientSecret, clientSecretValue)
+		if err != nil {
+			return "", fmt.Errorf("unable to update client secret: %w", err)
 		}
 	}
 
@@ -155,5 +149,43 @@ func (el *PutClient) generateSecret(ctx context.Context, keycloakClient *keycloa
 		return "", fmt.Errorf("unable to update client with new secret: %s, err: %w", clientSecret.Name, err)
 	}
 
-	return string(clientSecret.Data[keycloakApi.ClientSecretKey]), nil
+	return clientSecretValue, nil
+}
+
+func (el *PutClient) createClientSecret(ctx context.Context, keycloakClient *keycloakApi.KeycloakClient, secretName string, clientSecretValue string) error {
+	clientSecret := coreV1.Secret{
+		ObjectMeta: v1.ObjectMeta{Namespace: keycloakClient.Namespace,
+			Name: secretName},
+		Data: map[string][]byte{
+			keycloakApi.ClientSecretKey: []byte(clientSecretValue),
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(keycloakClient, &clientSecret, el.scheme); err != nil {
+		return fmt.Errorf("unable to set controller ref for secret: %w", err)
+	}
+
+	if err := el.Client.Create(ctx, &clientSecret); err != nil {
+		return fmt.Errorf("unable to create secret %+v, err: %w", clientSecret, err)
+	}
+
+	return nil
+}
+
+func (el *PutClient) updateClientSecret(ctx context.Context, keycloakClient *keycloakApi.KeycloakClient, clientSecret coreV1.Secret, clientSecretValue string) error {
+	if clientSecret.Data == nil {
+		clientSecret.Data = map[string][]byte{}
+	}
+
+	clientSecret.Data[keycloakApi.ClientSecretKey] = []byte(clientSecretValue)
+
+	if err := controllerutil.SetControllerReference(keycloakClient, &clientSecret, el.scheme); err != nil {
+		return fmt.Errorf("unable to set controller ref for secret: %w", err)
+	}
+
+	if err := el.Client.Update(ctx, &clientSecret); err != nil {
+		return fmt.Errorf("unable to update secret %+v, err: %w", clientSecret, err)
+	}
+
+	return nil
 }
