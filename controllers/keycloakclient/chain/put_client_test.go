@@ -179,9 +179,9 @@ func TestPutClient_Serve_SecretKeyMissing(t *testing.T) {
 	clientSecretValue, _ := pc.generateSecret(context.TODO(), &kc)
 
 	var foundClientSecret coreV1.Secret
-	err = pc.Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace,
+	err := pc.Client.Get(context.TODO(), types.NamespacedName{Namespace: namespace,
 		Name: secretName}, &foundClientSecret)
-		assert.NoError(err)
+	assert.NoError(t, err)
 
 	foundClientSecretValue := string(foundClientSecret.Data[keycloakApi.ClientSecretKey])
 
